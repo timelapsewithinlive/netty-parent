@@ -494,10 +494,13 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     private void processSelectedKeys() {
+        //selectedKeys 就是经过优化后的keys(底层是数组) , 默认不为null
+        //当有了新IO请求进来,jdk原生的Selector将SelectionKey放入存放感兴趣的key的集合中,
+        //而这个集合现在就是netty通过反射的方式强制替换为以数组为数据结构的selectedKeys, 数组不为空
         if (selectedKeys != null) {
             processSelectedKeysOptimized();
         } else {
-            processSelectedKeysPlain(selector.selectedKeys());
+            processSelectedKeysPlain(selector.selectedKeys());//selectedKeys为阻塞函数
         }
     }
 
@@ -573,10 +576,23 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             final SelectionKey k = selectedKeys.keys[i];
             // null out entry in the array to allow to have it GC'ed once the Channel close
             // See https://github.com/netty/netty/issues/2363
+
+            /**数组输出空项, 从而允许在channel 关闭时对其进行垃圾回收
+             *数组中当前循环对应的keys置空, 这种感兴趣的事件只处理一次就行
+             */
             selectedKeys.keys[i] = null;
 
+            /**获取出 attachment,默认情况下就是注册进Selector时,传入的第三个参数  this===> NioServerSocketChannel
+             *一个Selector中可能被绑定上了成千上万个Channel,通过K+attachment 的手段, 精确的取出发生指定事件的channel,
+             * 进而获取channel中的unsafe类进行下一步处理
+             */
             final Object a = k.attachment();
 
+            /**
+             * 进入这个方法,传进入感兴趣的key + AbstractNioChannel，
+             * 如果是NioServerSocketChannel是连接事件，
+             * 如果是NioSocketChannel是读、写事件，
+             */
             if (a instanceof AbstractNioChannel) {
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
@@ -596,7 +612,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * 处理selectedkey
+     * 底层对数据的读写都是unsafe完成的
+     * @param k
+     * @param ch
+     */
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
+        //这个unsafe也是和Channel进行唯一绑定的对象
+        //NioUnsafe的服务端是 NioMessageUnsafe，NioUnsafe的客户端是 NioByteUnsafe
         final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
         if (!k.isValid()) {
             final EventLoop eventLoop;
@@ -612,7 +636,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // and thus the SelectionKey could be cancelled as part of the deregistration process, but the channel is
             // still healthy and should not be closed.
             // See https://github.com/netty/netty/issues/5125
-            if (eventLoop != this || eventLoop == null) {
+            if (eventLoop != this || eventLoop == null) { //确保多线程下的安全性
                 return;
             }
             // close the channel if the key is not valid anymore
@@ -620,15 +644,18 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             return;
         }
 
+        //NioServerSocketChannel和selectKey都合法的话, 就进入下面的 处理阶段
         try {
+            //获取SelectedKey 的 关心的选项
             int readyOps = k.readyOps();
             // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
             // the NIO JDK channel implementation may throw a NotYetConnectedException.
+            //在read() write()之前我们需要调用 finishConnect()方法, 否则NIO JDK抛出异常
             if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
                 int ops = k.interestOps();
-                ops &= ~SelectionKey.OP_CONNECT;
+                ops &= ~SelectionKey.OP_CONNECT;//先非运算，再与运算
                 k.interestOps(ops);
 
                 unsafe.finishConnect();
@@ -642,6 +669,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
+            //同样是检查 readOps是否为零, 来检查是否出现了  jdk  空轮询的bug
+            //服务端将读事件也作为连接事件处理
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
                 unsafe.read();
             }

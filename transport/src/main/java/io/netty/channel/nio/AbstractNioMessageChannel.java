@@ -61,9 +61,14 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
 
         @Override
         public void read() {
+
+            //当前的线程必须是在 EventLoop  里面的线程才有资格执行
             assert eventLoop().inEventLoop();
+
             final ChannelConfig config = config();
             final ChannelPipeline pipeline = pipeline();
+
+            //用于查看服务端接受的速率, 说白了就是控制服务端是否继续 read 客户端的IO事件
             final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
             allocHandle.reset(config);
 
@@ -72,6 +77,10 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
+                        /**
+                         * doReadMessages(readBuf) 这是AbstractNioMessageChannel的抽象方法,
+                         * 从chanel读取内容我们需要一个维护特化chanenl引用的对象,谁呢? 它的子类NioServerSocketChannel
+                         */
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
@@ -81,6 +90,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                             break;
                         }
 
+                        //对读到的连接,进行简单的计数
                         allocHandle.incMessagesRead(localRead);
                     } while (allocHandle.continueReading());
                 } catch (Throwable t) {
@@ -90,6 +100,12 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    /**
+                     * 处理新的连接的逻辑来到这, 意思是让pipeline中发生事件传播,
+                     * pipeline是谁的呢?  现在是NioMessageUnsafe  所以是服务端的,
+                     * 事件是如何传播的呢?  责任链从头开始，head-->>ServerBootStraptAcceptor-->>tail 依次传播,
+                     * 传播的什么事件?  ChannelRead,  也就是说,会去调用 ServerBootStraptAcceptor的ChannelRead方法,跟进去
+                     */
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
                 readBuf.clear();

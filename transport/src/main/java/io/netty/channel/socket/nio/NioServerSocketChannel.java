@@ -154,6 +154,19 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
         try {
             if (ch != null) {
+                /**
+                 *  todo  把java原生的channel, 封装成 Netty自定义的封装的channel , 这里的buf是list集合对象,由上一层传递过来的
+                 *  todo  this  --  NioServerSocketChannel
+                 *  todo  ch --     SocketChnnel
+                 *
+                 *  从原生的jdk ServerSocketChannel中 accept出 jdk原生的 SocketChanel
+                 * 将jdk原生的 Socket封装成Netty对它的封装类型 NioChannel
+                 *
+                 * 为啥,服务端的channel需要反射创建,而客户的的channel直接new?#
+                 * 我的理解是,netty不仅可以做 NIO编程模型的服务器, 传统的阻塞式IO,或者其他类型的服务器他也可以做,
+                 * 我们传递进入的服务端Chanel的类型决定了他可以成为的服务器的类型,
+                 * netty的设计者是不知道,用户想用netty做些什么的,于是设计成通过反射创建
+                 */
                 buf.add(new NioSocketChannel(this, ch));//客户端不用反射创建
                 return 1;
             }
