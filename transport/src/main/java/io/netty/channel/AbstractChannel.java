@@ -510,7 +510,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
-                doRegister();
+                doRegister();//是真正的将jdk原生的channel注册进原生的selector
                 neverRegistered = false;
                 registered = true;
 
@@ -519,11 +519,16 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 safeSetSuccess(promise);
+                //传播channel注册事件,是在 header --> ServerBootStraptAccptor --> 用户自己添加的handler --> tail 中,挨个传递 ChannelRegistered, 就是从头开始调用它们的函数, 我们着重看下面的第三个
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
+                //针对两个channel,存在两种情况
+                //如果是服务端的channel, 只有在channel绑定完端口后,才会处于active的状态
+                //如果是客户端的channel, 注册到selector+处于连接状态, 他就是active状态
                 if (isActive()) {
                     if (firstRegistration) {
+                        //其实是比较绕的,涉及到了pipeline中事件的传递,但是它的作用很大,通过传播channelActive挨个回调他们的状态,netty成功的给这条客户端的新连接注册上了netty能处理的感兴趣的事件
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
                         // This channel was registered before and autoRead() is set. This means we need to begin read
