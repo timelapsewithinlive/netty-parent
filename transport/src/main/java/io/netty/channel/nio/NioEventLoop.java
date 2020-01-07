@@ -670,7 +670,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
             //同样是检查 readOps是否为零, 来检查是否出现了  jdk  空轮询的bug
-            //服务端将读事件也作为连接事件处理
+            //服务端的NioMessageUnsafe进行连接接受
+            //客户端NioByteUnsafe真正从socket缓冲区读取数据
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
                 unsafe.read();
             }
