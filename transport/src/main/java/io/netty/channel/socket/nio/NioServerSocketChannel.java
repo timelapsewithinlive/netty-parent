@@ -44,7 +44,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
                              implements io.netty.channel.socket.ServerSocketChannel {
 
     private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
-    private static final SelectorProvider DEFAULT_SELECTOR_PROVIDER = SelectorProvider.provider();
+    private static final SelectorProvider DEFAULT_SELECTOR_PROVIDER = SelectorProvider.provider();//JDK里对于Selector的实现都交由SelectorProvider的方法publicstatic SelectorProvider provider()来提供
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NioServerSocketChannel.class);
 
@@ -55,6 +55,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
              *  {@link SelectorProvider#provider()} which is called by each ServerSocketChannel.open() otherwise.
              *
              *  See <a href="https://github.com/netty/netty/issues/2308">#2308</a>.
+             *  JDK里对于Selector的实现都交由SelectorProvider的方法publicstatic SelectorProvider provider()来提供
              */
             return provider.openServerSocketChannel();
         } catch (IOException e) {
@@ -67,6 +68,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     /**
      * Create a new instance
+     * //反射中调用默认的构造方法
      */
     public NioServerSocketChannel() {
         this(newSocket(DEFAULT_SELECTOR_PROVIDER));
@@ -83,7 +85,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance using the given {@link ServerSocketChannel}.
      */
     public NioServerSocketChannel(ServerSocketChannel channel) {
-        super(null, channel, SelectionKey.OP_ACCEPT);
+        super(null, channel, SelectionKey.OP_ACCEPT);//服务端处理连接事件
         config = new NioServerSocketChannelConfig(this, javaChannel().socket());
     }
 
@@ -136,13 +138,23 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         javaChannel().close();
     }
 
+    /**
+     * 在 doReadMessages 中, 通过 javaChannel().accept() 获取到客户端新连接的 SocketChannel,
+     * 接着就实例化一个 NioSocketChannel, 并且传入 NioServerSocketChannel 对象(即 this),
+     * 由此可知, 我们创建的这个 NioSocketChannel 的父 Channel 就是 NioServerSocketChannel 实例 .
+     * 接下来就经由 Netty 的 ChannelPipeline 机制, 将读取事件逐级发送到各个 handler 中,
+     * 于是就会触发前面我们提到的 ServerBootstrapAcceptor.channelRead 方法啦
+     * @param buf
+     * @return
+     * @throws Exception
+     */
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
             if (ch != null) {
-                buf.add(new NioSocketChannel(this, ch));
+                buf.add(new NioSocketChannel(this, ch));//客户端不用反射创建
                 return 1;
             }
         } catch (Throwable t) {

@@ -77,6 +77,15 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      *
      * @param parent
      *        the parent of this channel. {@code null} if there's no parent.
+     *  实例化一个 unsafe 和 pipeline:
+     *
+     *  客户端的 unsafe 是一个 AbstractNioByteChannel#NioByteUnsafe 的实例, 而在服务器端时, 因为 AbstractNioMessageChannel 重写了newUnsafe 方法:
+     *
+     * @Override
+     * protected AbstractNioUnsafe newUnsafe() {
+     *     return new NioMessageUnsafe();
+     * }
+     * 因此在服务器端, unsafe 字段其实是一个 AbstractNioMessageChannel#AbstractNioUnsafe 的实例.
      */
     protected AbstractChannel(Channel parent) {
         this.parent = parent;

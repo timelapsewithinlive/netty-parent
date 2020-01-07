@@ -102,7 +102,7 @@ public final class SocketUtils {
         }
     }
 
-    //接口请求进行处理
+    //服务端接受请求，创建 SocketChannel
     public static SocketChannel accept(final ServerSocketChannel serverSocketChannel) throws IOException {
         try {
             return AccessController.doPrivileged(new PrivilegedExceptionAction<SocketChannel>() {
