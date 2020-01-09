@@ -41,20 +41,27 @@ public class HttpHelloWorldServerHandler extends ChannelInboundHandlerAdapter {
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    public void channelRead(final ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof HttpRequest) {
             HttpRequest req = (HttpRequest) msg;
 
             boolean keepAlive = HttpUtil.isKeepAlive(req);
-            FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK, Unpooled.wrappedBuffer(CONTENT));
+            final FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK, Unpooled.wrappedBuffer(CONTENT));
             response.headers().set(CONTENT_TYPE, "text/plain");
             response.headers().setInt(CONTENT_LENGTH, response.content().readableBytes());
+
 
             if (!keepAlive) {
                 ctx.write(response).addListener(ChannelFutureListener.CLOSE);
             } else {
                 response.headers().set(CONNECTION, KEEP_ALIVE);
-                ctx.write(response);
+               Thread thread = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        ctx.write(response);
+                    }
+                });
+                thread.start();
             }
         }
     }
